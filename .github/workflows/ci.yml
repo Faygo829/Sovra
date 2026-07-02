@@ -35,7 +35,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run Soroban contract tests
-        run: cargo test -p guardian_executor_soroban
+        run: cargo test --manifest-path contracts/hello_world/Cargo.toml
 
       - name: Build Soroban wasm
-        run: cargo build -p guardian_executor_soroban --target wasm32v1-none --release
+        run: cargo build --manifest-path contracts/hello_world/Cargo.toml --target wasm32v1-none --release
