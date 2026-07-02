@@ -5,6 +5,9 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { Connection, clusterApiUrl } from "@solana/web3.js";
 
+const STELLAR_WALLET_KEY = "guardian_stellar_wallet_address";
+const STELLAR_HORIZON_TESTNET = "https://horizon-testnet.stellar.org";
+
 const USER_WALLET_KEY = "guardian_user_wallet";
 const AI_AUTHORITY_KEY = "guardian_ai_authority_wallet";
 const WALLET_EXISTS_KEY = "guardian_wallet_exists";
@@ -27,6 +30,7 @@ interface StoredKeypair {
 export class WalletService {
   private userWallet: Keypair | null = null;
   private aiAuthority: Keypair | null = null;
+  private stellarWalletAddress: string | null = null;
   private connection: Connection;
 
   constructor() {
@@ -81,6 +85,96 @@ export class WalletService {
     return wallet.publicKey;
   }
 
+  async getStellarWalletAddress(): Promise<string | null> {
+    if (this.stellarWalletAddress) {
+      return this.stellarWalletAddress;
+    }
+
+    const stored = await SecureStore.getItemAsync(STELLAR_WALLET_KEY);
+    if (!stored) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as { address?: string };
+      this.stellarWalletAddress = parsed.address ?? null;
+      return this.stellarWalletAddress;
+    } catch {
+      return null;
+    }
+  }
+
+  async getDisplayWalletAddress(): Promise<string> {
+    const stellarAddress = await this.getStellarWalletAddress();
+    if (stellarAddress) {
+      return stellarAddress;
+    }
+
+    const wallet = await this.getUserWallet();
+    return wallet.publicKey.toBase58();
+  }
+
+  async connectFreighterWallet(): Promise<string> {
+    try {
+      const freighterModule = await import("@stellar/freighter-api");
+      const requestAccess =
+        (freighterModule as any)?.requestAccess ??
+        (freighterModule as any)?.default?.requestAccess;
+      const getAddress =
+        (freighterModule as any)?.getAddress ??
+        (freighterModule as any)?.default?.getAddress;
+
+      if (typeof requestAccess !== "function") {
+        throw new Error("Freighter SDK is not available in this environment");
+      }
+
+      const accessResult = await requestAccess();
+      if (accessResult?.error) {
+        throw new Error(accessResult.error);
+      }
+
+      const address: string = accessResult?.address ?? (await getAddress?.());
+      if (!address) {
+        throw new Error("Freighter did not return a Stellar address");
+      }
+
+      this.stellarWalletAddress = address;
+      await SecureStore.setItemAsync(
+        STELLAR_WALLET_KEY,
+        JSON.stringify({ address }),
+      );
+      return address;
+    } catch (error: any) {
+      const freighterApi = globalThis.window?.freighterApi as
+        | {
+            requestAccess?: () => Promise<{ address?: string; error?: string }>;
+            getAddress?: () => Promise<string>;
+          }
+        | undefined;
+
+      if (freighterApi?.requestAccess) {
+        const accessResult = await freighterApi.requestAccess();
+        if (accessResult?.error) {
+          throw new Error(accessResult.error);
+        }
+
+        const address: string = accessResult?.address ?? (await freighterApi.getAddress?.());
+        if (!address) {
+          throw new Error("Freighter did not return a Stellar address");
+        }
+
+        this.stellarWalletAddress = address;
+        await SecureStore.setItemAsync(
+          STELLAR_WALLET_KEY,
+          JSON.stringify({ address }),
+        );
+        return address;
+      }
+
+      throw new Error(error?.message || "Freighter is not available in this environment");
+    }
+  }
+
   async getAiAuthorityAddress(): Promise<PublicKey> {
     const w = await this.getAiAuthorityWallet();
     return w.publicKey;
@@ -89,8 +183,10 @@ export class WalletService {
   async clearWallets(): Promise<void> {
     await SecureStore.deleteItemAsync(USER_WALLET_KEY);
     await SecureStore.deleteItemAsync(AI_AUTHORITY_KEY);
+    await SecureStore.deleteItemAsync(STELLAR_WALLET_KEY);
     this.userWallet = null;
     this.aiAuthority = null;
+    this.stellarWalletAddress = null;
   }
 
   // Import wallet from private key (base58 encoded)
@@ -149,8 +245,11 @@ export class WalletService {
 
   // Check if wallet already exists
   async walletExists(): Promise<boolean> {
-    const stored = await SecureStore.getItemAsync(USER_WALLET_KEY);
-    return !!stored;
+    const [solanaWallet, stellarWallet] = await Promise.all([
+      SecureStore.getItemAsync(USER_WALLET_KEY),
+      SecureStore.getItemAsync(STELLAR_WALLET_KEY),
+    ]);
+    return !!solanaWallet || !!stellarWallet;
   }
 
   // Get secret key as base58 for export
@@ -159,8 +258,33 @@ export class WalletService {
     return bs58.encode(wallet.secretKey);
   }
 
-  // Get balance (in SOL) for current user wallet
+  // Get balance for the active wallet.
+  // Stellar wallets use Horizon testnet; legacy demo wallets keep the existing Solana devnet path.
   async getBalance(): Promise<number> {
+    const stellarAddress = await this.getStellarWalletAddress();
+    if (stellarAddress) {
+      const response = await fetch(
+        `${STELLAR_HORIZON_TESTNET}/accounts/${stellarAddress}`,
+      );
+
+      if (response.status === 404) {
+        return 0;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch Stellar balance (${response.status})`,
+        );
+      }
+
+      const account = await response.json();
+      const nativeBalance = account.balances?.find?.(
+        (balance: any) => balance.asset_type === "native",
+      );
+
+      return Number(nativeBalance?.balance ?? 0);
+    }
+
     const wallet = await this.getUserWallet();
     const lamports = await this.connection.getBalance(wallet.publicKey);
     return lamports / 1e9;

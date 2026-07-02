@@ -144,7 +144,7 @@ export const WalletScreen: React.FC<Props> = ({ navigation }) => {
               { color: Colors.primary, marginTop: Spacing.sm },
             ]}
           >
-            {typeof balance === "number" ? balance.toFixed(4) : "0.0000"} SOL
+            {typeof balance === "number" ? balance.toFixed(4) : "0.0000"} XLM
           </Text>
         </View>
 
@@ -291,7 +291,7 @@ export const WalletScreen: React.FC<Props> = ({ navigation }) => {
             { color: Colors.textPrimary, marginBottom: Spacing.md },
           ]}
         >
-          Need SOL?
+          Need XLM?
         </Text>
         <Text
           style={[
@@ -299,12 +299,13 @@ export const WalletScreen: React.FC<Props> = ({ navigation }) => {
             { color: Colors.textSecondary, lineHeight: 20 },
           ]}
         >
-          • Fund your wallet at{" "}
+          • Fund your testnet wallet with Friendbot or Horizon testnet tools
+          {"\n"}• Use the Stellar testnet, not Solana devnet
+          {"\n"}• Minimum balance depends on your test flow and Soroban ops
+          {"\n"}• Friendbot: {" "}
           <Text style={{ color: Colors.primary }}>
-            solana.com/cli/transfer-tokens
+            https://friendbot.stellar.org
           </Text>
-          {"\n"}• Use faucet for devnet: Use an airdrop command
-          {"\n"}• Minimum ~0.01 SOL needed for Guardian transactions
         </Text>
       </Card>
     </SafeAreaWrapper>

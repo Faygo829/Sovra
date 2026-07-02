@@ -1,13 +1,12 @@
 {
   "name": "guardian_executor",
   "version": "0.1.0",
-  "description": "Solana Anchor program for AI decision enforcement",
+  "description": "Stellar/Soroban contract for AI decision enforcement",
   "main": "dist/index.js",
   "scripts": {
-    "test": "anchor test",
-    "build": "anchor build",
-    "deploy": "anchor deploy",
-    "test:devnet-integration": "ts-node tests/devnet-integration.ts"
+    "test": "cargo test -p guardian_executor_soroban",
+    "build": "cargo build -p guardian_executor_soroban",
+    "deploy": "echo 'Deploy with: soroban contract deploy --network testnet --source <identity> --wasm target/wasm32-unknown-unknown/release/guardian_executor_soroban.wasm'"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",

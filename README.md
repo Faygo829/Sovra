@@ -2,6 +2,8 @@
 
 Guardian Executor is a Stellar-first transaction protection system. It combines local AI, signed policy decisions, and Soroban enforcement to help users decide whether a payment should be allowed, delayed, reduced, or blocked.
 
+CONTRACT ADDRESS : CAEIIWEKVHLOPNRIFT4HW2Q3PUSAQGZ3REKAX4GAXXPIEVAEYESN4B33
+
 ## What it is
 
 Most wallet flows stop at a basic signature prompt. Guardian adds a decision layer before the transaction is finalized:
@@ -68,6 +70,14 @@ The design focuses on preventing tampering and replay:
 - `guardianClient.ts` - client-side transaction assembly and signing
 - `qvac-decision-engine/` - local decision pipeline and validation tooling
 - `mobile-app/` - user-facing app shell
+- `contracts/hello_world/` - minimal Soroban contract scaffold for Stellar testnet submissions
+
+## Stellar testnet setup
+
+- Connect a Stellar wallet through Freighter in the mobile app.
+- The app reads the active testnet contract from `EXPO_PUBLIC_STELLAR_CONTRACT_ID`.
+- Deploy the Soroban scaffold in `contracts/hello_world/` to Stellar testnet and set `EXPO_PUBLIC_STELLAR_CONTRACT_ID` to your deployed contract ID (for example, `CC...` on testnet).
+- A starter env template is available in `mobile-app/.env.example`.
 
 ## Core idea
 

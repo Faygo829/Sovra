@@ -38,8 +38,7 @@ export const AppNavigator: React.FC = () => {
       try {
         const walletExists = await walletService.walletExists();
         if (walletExists) {
-          const wallet = await walletService.getUserWallet();
-          const address = wallet.publicKey.toBase58();
+          const address = await walletService.getDisplayWalletAddress();
           setAuthenticated(true, address);
         }
       } catch (error) {
@@ -81,7 +80,6 @@ export const AppNavigator: React.FC = () => {
             component={LoginScreen}
             options={{
               headerShown: false,
-              animationEnabled: false,
             }}
           />
         ) : (

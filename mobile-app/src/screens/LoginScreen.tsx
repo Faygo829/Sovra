@@ -33,6 +33,33 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   const setAuthenticated = useWalletStore((state) => state.setAuthenticated);
 
+  const handleConnectFreighter = async () => {
+    try {
+      setError("");
+      setLoading(true);
+
+      const address = await walletService.connectFreighterWallet();
+      setAuthenticated(true, address);
+
+      Alert.alert(
+        "Stellar wallet connected",
+        `Freighter connected successfully!\n\nAddress: ${address.slice(0, 8)}...${address.slice(-8)}`,
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.navigate("Home"),
+          },
+        ],
+      );
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to connect Freighter";
+      setError(errorMsg);
+      Alert.alert("Connect Failed", errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleImport = async () => {
     try {
       setError("");
@@ -102,7 +129,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 },
               ]}
             >
-              Import Your Wallet
+              Connect Your Wallet
             </Text>
             <Text
               style={[
@@ -114,9 +141,38 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 },
               ]}
             >
-              Enter your private key or seed phrase to access your wallet
+              Connect Freighter for Stellar testnet, or keep using the local
+              demo import below.
             </Text>
           </View>
+
+          <Card variant="surface" style={styles.connectCard}>
+            <Text
+              style={[
+                Typography.captionStrong,
+                { color: Colors.textSecondary, marginBottom: Spacing.xs },
+              ]}
+            >
+              STELLAR WALLET
+            </Text>
+            <Button
+              title={loading ? "Connecting..." : "Connect Freighter Wallet"}
+              variant="primary"
+              size="lg"
+              onPress={handleConnectFreighter}
+              disabled={loading}
+              style={styles.importButton}
+            />
+            <Text
+              style={[
+                Typography.tiny,
+                { color: Colors.textSecondary, marginTop: Spacing.sm },
+              ]}
+            >
+              Freighter is the Stellar path. Use it on the web build to connect
+              a testnet wallet.
+            </Text>
+          </Card>
 
           {/* Method Selector */}
           <View style={styles.methodContainer}>
@@ -236,6 +292,10 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.xl,
+  },
+  connectCard: {
+    marginBottom: Spacing.lg,
+    padding: Spacing.md,
   },
   methodContainer: {
     marginBottom: Spacing.lg,
