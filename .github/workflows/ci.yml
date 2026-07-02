@@ -23,6 +23,13 @@ jobs:
       - name: Install wasm target
         run: rustup target add wasm32v1-none
 
+      - name: Verify checkout contents
+        run: |
+          pwd
+          ls -la
+          ls -la contracts
+          ls -la contracts/hello_world
+
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
@@ -35,7 +42,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run Soroban contract tests
-        run: cargo test --manifest-path contracts/hello_world/Cargo.toml
+        run: cargo test --manifest-path ./contracts/hello_world/Cargo.toml
 
       - name: Build Soroban wasm
-        run: cargo build --manifest-path contracts/hello_world/Cargo.toml --target wasm32v1-none --release
+        run: cargo build --manifest-path ./contracts/hello_world/Cargo.toml --target wasm32v1-none --release
