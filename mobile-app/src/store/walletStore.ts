@@ -50,7 +50,7 @@ export const useWalletStore = create<WalletStoreState>((set) => ({
     try {
       // Lazy import walletService to avoid circular imports
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { walletService } = require("../services/solana/walletService");
+      const { walletService } = require("../services/stellar/walletService");
       const bal = await walletService.getBalance();
       set({ balance: bal, isLoading: false });
     } catch (err: any) {

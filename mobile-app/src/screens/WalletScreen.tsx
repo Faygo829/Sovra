@@ -17,7 +17,7 @@ import { SafeAreaWrapper, Card, Button } from "../components";
 import { Colors, Typography, Spacing, BorderRadius } from "../themes";
 import type { RootStackParamList } from "../types";
 import { useWalletStore } from "../store/walletStore";
-import { walletService } from "../services/solana/walletService";
+import { walletService } from "../services/stellar/walletService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Wallet">;
 

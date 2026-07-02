@@ -8,7 +8,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Colors } from "../themes";
 import { useWalletStore } from "../store/walletStore";
-import { walletService } from "../services/solana/walletService";
+import { walletService } from "../services/stellar/walletService";
 
 // Screens
 import { HomeScreen } from "../screens/HomeScreen";

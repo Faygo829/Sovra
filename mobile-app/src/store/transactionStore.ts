@@ -5,14 +5,14 @@
 
 import { create } from "zustand";
 import { DecisionType, TransactionStatus } from "../types";
-import { guardianService } from "../services/solana/guardianService";
+import { guardianService } from "../services/stellar/guardianService";
 import type { OCRScanResult } from "../services/ocr/types";
 import type {
   GuardianAnalysisResult,
   GuardianExecutionOptions,
   GuardianExecutionResult,
   GuardianTransactionInput,
-} from "../services/solana/types";
+} from "../services/stellar/types";
 
 export interface TransactionStoreState {
   currentTransaction: {

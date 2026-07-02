@@ -18,7 +18,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { SafeAreaWrapper, Button, Card } from "../components";
 import { Colors, Typography, Spacing, BorderRadius } from "../themes";
 import type { RootStackParamList } from "../types";
-import { walletService } from "../services/solana/walletService";
+import { walletService } from "../services/stellar/walletService";
 import { useWalletStore } from "../store/walletStore";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Login">;
