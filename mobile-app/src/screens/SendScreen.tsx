@@ -19,7 +19,7 @@ import { useWalletStore } from "../store/walletStore";
 import { useOCRStore } from "../store/ocrStore";
 import { Colors, Typography, Spacing, BorderRadius } from "../themes";
 import type { RootStackParamList } from "../types";
-import { isValidSolanaAddress } from "../utils";
+import { isValidStellarAddress } from "../utils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Send">;
 
@@ -52,8 +52,8 @@ export const SendScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    if (!isValidSolanaAddress(recipient.trim())) {
-      setError("Please enter a valid Solana address");
+    if (!isValidStellarAddress(recipient.trim())) {
+      setError("Please enter a valid Stellar address");
       return;
     }
 
@@ -120,7 +120,7 @@ export const SendScreen: React.FC<Props> = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[Typography.h2, { color: Colors.textPrimary }]}>
-            Send SOL
+            Send XLM
           </Text>
           <Text style={[Typography.body, { color: Colors.textSecondary }]}>
             Enter recipient and amount

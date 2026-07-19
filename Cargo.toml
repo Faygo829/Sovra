@@ -16,6 +16,3 @@ codegen-units = 16
 inherits = "release"
 debug = true
 
-[patch.crates-io]
-anchor-syn = { path = "vendor/anchor-syn" }
-

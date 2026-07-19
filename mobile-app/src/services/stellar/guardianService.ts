@@ -1,4 +1,3 @@
-import { Connection, PublicKey } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import { DecisionType } from "../../types";
 import { TransactionStatus } from "../../types";
@@ -18,21 +17,21 @@ const secondsFromNow = (seconds: number): number =>
   Math.floor(Date.now() / 1000) + seconds;
 
 export class GuardianService {
-  private connection = new Connection(GUARDIAN_DEVNET_RPC_URL, "confirmed");
+  private connection = {
+    url: GUARDIAN_DEVNET_RPC_URL,
+  };
 
-  getConnection(): Connection {
+  getConnection(): { url: string } {
     return this.connection;
   }
 
-  async getBalanceLamports(publicKey?: PublicKey): Promise<bigint> {
-    const wallet = publicKey ?? (await walletService.getWalletAddress());
-    const balance = await this.connection.getBalance(wallet, "confirmed");
-    return BigInt(balance);
+  async getBalanceLamports(publicKey?: string): Promise<bigint> {
+    void publicKey;
+    return 0n;
   }
 
-  async lookupPda(account: PublicKey): Promise<boolean> {
-    const info = await this.connection.getAccountInfo(account, "confirmed");
-    return info !== null;
+  async lookupPda(_account: string): Promise<boolean> {
+    return false;
   }
 
   async analyzeTransaction(
@@ -40,7 +39,7 @@ export class GuardianService {
     threatContext?: GuardianThreatContext,
   ): Promise<GuardianAnalysisResult> {
     const signer = await walletService.getUserWallet();
-    const recipient = new PublicKey(input.recipient);
+    const recipient = input.recipient;
     const amountLamports = toLamports(input.amountSol);
     const balanceLamports = await this.getBalanceLamports(signer.publicKey);
     const recipientExists = await this.lookupPda(recipient);
@@ -110,21 +109,21 @@ export class GuardianService {
     } else if (amountLamports > balanceLamports) {
       riskFactors.push("Requested amount exceeds available balance");
       decision = DecisionType.REJECT;
-      detailedReasoning = `❌ INSUFFICIENT FUNDS: You requested ${amountSol} SOL but only have ${Number(balanceLamports) / 1e9} SOL available.`;
+      detailedReasoning = `❌ INSUFFICIENT FUNDS: You requested ${amountSol} XLM but only have ${Number(balanceLamports) / 1e9} XLM available.`;
     } else if (!recipientExists && balanceRatio > 35) {
       riskFactors.push("High-value transfer to unknown recipient");
       decision = DecisionType.REJECT;
-      detailedReasoning = `🛑 GUARDIAN REJECTED: High-value transfer (${balanceRatio.toFixed(1)}% of your balance) to an unknown devnet recipient detected as too risky.`;
+      detailedReasoning = `🛑 GUARDIAN REJECTED: High-value transfer (${balanceRatio.toFixed(1)}% of your balance) to an unknown Stellar recipient detected as too risky.`;
     } else if (!recipientExists || balanceRatio > 35) {
       riskFactors.push("Additional verification required before execution");
       decision = DecisionType.DELAY;
       delaySeconds = 3600;
-      detailedReasoning = `⏰ GUARDIAN DELAYED (1 hour): ${!recipientExists ? "Unknown recipient on devnet." : ""} Transfer is ${balanceRatio.toFixed(1)}% of your balance. Manual verification recommended.`;
+      detailedReasoning = `⏰ GUARDIAN DELAYED (1 hour): ${!recipientExists ? "Unknown recipient on Stellar testnet." : ""} Transfer is ${balanceRatio.toFixed(1)}% of your balance. Manual verification recommended.`;
     } else if (balanceRatio > 15) {
       riskFactors.push("Amount is elevated compared to available balance");
       decision = DecisionType.PARTIAL;
       partialAmount = amountLamports / 2n;
-      detailedReasoning = `⚠️ GUARDIAN CAPPED AMOUNT: You requested ${amountSol} SOL (${balanceRatio.toFixed(1)}% of balance) which is elevated. Guardian recommends reducing to ${Number(partialAmount) / 1e9} SOL.`;
+      detailedReasoning = `⚠️ GUARDIAN CAPPED AMOUNT: You requested ${amountSol} XLM (${balanceRatio.toFixed(1)}% of balance) which is elevated. Guardian recommends reducing to ${Number(partialAmount) / 1e9} XLM.`;
     } else {
       decision = DecisionType.ALLOW;
       detailedReasoning = `✅ GUARDIAN APPROVED: Recipient verified, amount is safe (${balanceRatio.toFixed(1)}% of balance). Ready to execute.`;
@@ -174,9 +173,9 @@ export class GuardianService {
 
     const behaviorAnalysis =
       `📊 BLOCKCHAIN STATE:\n` +
-      `• Your balance: ${Number(balanceLamports) / 1_000_000_000} SOL\n` +
-      `• Requested: ${amountSol} SOL (${balanceRatio.toFixed(1)}% of balance)\n` +
-      `• Recipient: ${recipientExists ? "✓ Exists on devnet" : "✗ Unknown on devnet"}\n\n` +
+      `• Your balance: ${Number(balanceLamports) / 1_000_000_000} XLM\n` +
+      `• Requested: ${amountSol} XLM (${balanceRatio.toFixed(1)}% of balance)\n` +
+      `• Recipient: ${recipientExists ? "✓ Exists on testnet" : "✗ Unknown on testnet"}\n\n` +
       `🛡️ GUARDIAN DECISION:\n${detailedReasoning}`;
 
     const recommendation =

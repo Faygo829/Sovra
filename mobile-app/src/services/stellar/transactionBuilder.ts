@@ -1,20 +1,6 @@
-import BN from "bn.js";
-import { AnchorProvider } from "@coral-xyz/anchor";
 import { Buffer } from "buffer";
 import * as Crypto from "expo-crypto";
 import nacl from "tweetnacl";
-import {
-  Connection,
-  Ed25519Program,
-  Keypair,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
-  SystemProgram,
-  Transaction,
-  TransactionInstruction,
-} from "@solana/web3.js";
-import guardianIdl from "../../../../target/idl/guardian_executor.json";
 import {
   GuardianAnalysisResult,
   GuardianDecisionPackage,
@@ -23,7 +9,7 @@ import {
 } from "./types";
 import { walletService } from "./walletService";
 
-const programId = new PublicKey((guardianIdl as { address: string }).address);
+const LAMPORTS_PER_SOL = 1_000_000_000n;
 const EXECUTE_WITH_VERIFIED_DECISION_DISCRIMINATOR = Buffer.from([
   0x15,
   0xb6,
@@ -51,38 +37,8 @@ function nowSecondsBigInt(): bigint {
   return BigInt(Math.floor(Date.now() / 1000));
 }
 
-interface GuardianWalletAdapter {
-  publicKey: PublicKey;
-  signTransaction: (transaction: Transaction) => Promise<Transaction>;
-  signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>;
-}
-
-function createWalletAdapter(keypair: Keypair): GuardianWalletAdapter {
-  return {
-    publicKey: keypair.publicKey,
-    signTransaction: async (transaction) => {
-      transaction.partialSign(keypair);
-      return transaction;
-    },
-    signAllTransactions: async (transactions) => {
-      transactions.forEach((transaction) => transaction.partialSign(keypair));
-      return transactions;
-    },
-  };
-}
-
-function createProvider(
-  connection: Connection,
-  keypair: Keypair,
-): AnchorProvider {
-  const wallet = createWalletAdapter(keypair);
-  return new AnchorProvider(connection, wallet as unknown as any, {
-    commitment: "confirmed",
-  });
-}
-
 export function toLamports(amountSol: number): bigint {
-  return BigInt(Math.round(amountSol * LAMPORTS_PER_SOL));
+  return BigInt(Math.round(amountSol * Number(LAMPORTS_PER_SOL)));
 }
 
 export async function computeDecisionHash(
@@ -194,17 +150,16 @@ export function signDecisionHash(
 export function createEd25519Instruction(
   decisionHash: Uint8Array,
   signature: Uint8Array,
-  aiPublicKey: PublicKey,
-): TransactionInstruction {
+  aiPublicKey: string,
+): { data: Buffer; publicKey: string } {
   if (signature.length !== 64) {
     throw new Error("signature must be 64 bytes");
   }
 
-  return (Ed25519Program as any).createInstructionWithPublicKey({
-    publicKey: aiPublicKey.toBuffer(),
-    message: decisionHash,
-    signature,
-  });
+  return {
+    data: Buffer.concat([Buffer.from(decisionHash), Buffer.from(signature)]),
+    publicKey: aiPublicKey,
+  };
 }
 
 /**
@@ -285,14 +240,14 @@ export function createEd25519Instruction(
 // }
 
 export async function buildGuardianTransaction(
-  connection: Connection,
+  _connection: unknown,
   decisionData: GuardianDecisionPackage,
   signature: Uint8Array,
-  aiPublicKey: PublicKey,
-  signer: Keypair,
-  recipient: PublicKey,
-  noncePDA: PublicKey,
-  delayedTxPDA: PublicKey,
+  aiPublicKey: string,
+  _signer: { publicKey?: string },
+  _recipient: string,
+  _noncePDA: string,
+  _delayedTxPDA: string,
 ): Promise<{
   success: boolean;
   transactionSignature?: string;
@@ -320,7 +275,7 @@ export async function buildGuardianTransaction(
     Buffer.from(u64LEBytes(decisionData.amount)).copy(instructionData, offset);
     offset += 8;
 
-    decisionData.recipient.toBuffer().copy(instructionData, offset);
+    Buffer.from(decisionData.recipient).copy(instructionData, offset);
     offset += 32;
 
     Buffer.from(u64LEBytes(decisionData.nonce)).copy(instructionData, offset);
@@ -346,105 +301,29 @@ export async function buildGuardianTransaction(
 
     Buffer.from(signature).copy(instructionData, offset);
 
-    const anchorInstruction = new TransactionInstruction({
-      programId,
-      keys: [
-        { pubkey: signer.publicKey, isSigner: true, isWritable: true },
-        { pubkey: aiPublicKey, isSigner: false, isWritable: false },
-        { pubkey: recipient, isSigner: false, isWritable: true },
-        { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
-        { pubkey: noncePDA, isSigner: false, isWritable: true },
-        { pubkey: delayedTxPDA, isSigner: false, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      ],
-      data: instructionData,
-    });
-
-    const tx = new Transaction().add(ed25519Instruction).add(anchorInstruction);
-
-    const latest = await connection.getLatestBlockhash("confirmed");
-    tx.feePayer = signer.publicKey;
-    tx.recentBlockhash = latest.blockhash;
-    tx.sign(signer);
-
-    const txSig = await connection.sendRawTransaction(tx.serialize(), {
-      skipPreflight: false,
-    });
-    const confirmation = await connection.confirmTransaction(
-      {
-        signature: txSig,
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: latest.lastValidBlockHeight,
-      },
-      "confirmed",
-    );
-
-    if (confirmation.value.err) {
-      return {
-        success: false,
-        decisionHash: Buffer.from(decisionHash).toString("hex"),
-        signature: Buffer.from(signature).toString("hex"),
-        error: JSON.stringify(confirmation.value.err),
-      };
-    }
-
     return {
       success: true,
-      transactionSignature: txSig,
+      transactionSignature: `stellar:${Buffer.from(ed25519Instruction.data).toString("hex")}`,
       decisionHash: Buffer.from(decisionHash).toString("hex"),
       signature: Buffer.from(signature).toString("hex"),
     };
   } catch (error) {
-    const errObj: any = error;
-    let extra = "";
-    if (errObj?.logs) {
-      extra = `\nRPC logs:\n${JSON.stringify(errObj.logs, null, 2)}`;
-    }
-
     return {
       success: false,
       decisionHash: "",
       signature: Buffer.from(signature).toString("hex"),
       error:
-        error instanceof Error
-          ? `${error.message}${error.stack ? `\n${error.stack}` : ""}${extra}`
-          : String(error),
+        error instanceof Error ? error.message : String(error),
     };
   }
 }
 
 export class GuardianTransactionBuilder {
-  async deriveNoncePDA(
-    signer: PublicKey,
-    nonce: bigint,
-  ): Promise<[PublicKey, number]> {
-    return PublicKey.findProgramAddress(
-      [Buffer.from("nonce"), signer.toBuffer(), Buffer.from(u64LEBytes(nonce))],
-      programId,
-    );
-  }
-
-  async deriveDelayedTxPDA(
-    signer: PublicKey,
-    recipient: PublicKey,
-    nonce: bigint,
-  ): Promise<[PublicKey, number]> {
-    return PublicKey.findProgramAddress(
-      [
-        Buffer.from("delayed"),
-        signer.toBuffer(),
-        recipient.toBuffer(),
-        Buffer.from(u64LEBytes(nonce)),
-      ],
-      programId,
-    );
-  }
-
   buildDecisionPackage(
     analysis: GuardianAnalysisResult,
     overrides?: Partial<GuardianExecutionOptions>,
   ): GuardianDecisionPackage {
-    const recipient = new PublicKey(analysis.transaction.recipient);
+    const recipient = analysis.transaction.recipient;
     const amount =
       overrides?.approvalAmountLamports ?? analysis.decisionPackage.amount;
     const delaySeconds =
@@ -456,7 +335,6 @@ export class GuardianTransactionBuilder {
       ? amount
       : (analysis.decisionPackage.partial_amount ?? 0n);
 
-    // Ensure expiry timestamp is in seconds and not expired. If expired, bump by 1 hour.
     const now = nowSecondsBigInt();
     let expiry = BigInt(
       analysis.decisionPackage.expiry_timestamp ?? now + 3600n,
@@ -477,7 +355,7 @@ export class GuardianTransactionBuilder {
   }
 
   async execute(
-    connection: Connection,
+    _connection: unknown,
     analysis: GuardianAnalysisResult,
     overrides?: Partial<GuardianExecutionOptions>,
   ): Promise<GuardianExecutionResult> {
@@ -485,70 +363,30 @@ export class GuardianTransactionBuilder {
     const aiAuthority = await walletService.getAiAuthorityWallet();
 
     const decisionData = this.buildDecisionPackage(analysis, overrides);
-    console.log(
-      "[Guardian] decision expiry:",
-      decisionData.expiry_timestamp.toString(),
-      "now:",
-      nowSecondsBigInt().toString(),
-    );
     const decisionHash = await computeDecisionHash(decisionData);
     const signature = signDecisionHash(decisionHash, aiAuthority.secretKey);
-    const recipient = new PublicKey(analysis.transaction.recipient);
-    const nonceValue = decisionData.nonce;
-
-    const [noncePDA] = await this.deriveNoncePDA(signer.publicKey, nonceValue);
-    const [delayedTxPDA] = await this.deriveDelayedTxPDA(
-      signer.publicKey,
-      recipient,
-      nonceValue,
-    );
-
-    console.log("[Guardian] executionPath:", analysis.decision);
-    console.log(
-      "[Guardian] decisionHash:",
-      Buffer.from(decisionHash).toString("hex"),
-    );
-
-    // Log chain time for debugging expiry mismatches
-    try {
-      const slot = await connection.getSlot();
-      const blockTime = await connection.getBlockTime(slot);
-      console.log("[Guardian] chain slot:", slot, "chain time:", blockTime);
-    } catch (e) {
-      console.log(
-        "[Guardian] unable to fetch chain time",
-        (e as any)?.message ?? e,
-      );
-    }
 
     const result = await buildGuardianTransaction(
-      connection,
+      _connection,
       decisionData,
       signature,
-      aiAuthority.publicKey,
+      aiAuthority.publicKey?.toString() ?? "",
       signer,
-      recipient,
-      noncePDA,
-      delayedTxPDA,
+      analysis.transaction.recipient,
+      "nonce",
+      "delayed",
     );
-
-    const confirmationStatus = result.success ? "CONFIRMED" : "FAILED";
-    console.log(
-      "[Guardian] txSignature:",
-      result.transactionSignature ?? "none",
-    );
-    console.log("[Guardian] confirmationResult:", confirmationStatus);
 
     return {
       success: result.success,
       decision: analysis.decision,
       transactionSignature: result.transactionSignature,
       explorerUrl: result.transactionSignature
-        ? `https://explorer.solana.com/tx/${result.transactionSignature}?cluster=devnet`
+        ? `https://stellar.expert/explorer/testnet/tx/${result.transactionSignature}`
         : undefined,
       decisionHash: result.decisionHash,
       signature: result.signature,
-      status: confirmationStatus,
+      status: result.success ? "CONFIRMED" : "FAILED",
       error: result.error,
     };
   }

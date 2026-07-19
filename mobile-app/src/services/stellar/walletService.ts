@@ -1,9 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { Buffer } from "buffer";
 import nacl from "tweetnacl";
-import { Keypair, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
-import { Connection, clusterApiUrl } from "@solana/web3.js";
 
 const STELLAR_WALLET_KEY = "guardian_stellar_wallet_address";
 const STELLAR_HORIZON_TESTNET = "https://horizon-testnet.stellar.org";
@@ -27,51 +25,58 @@ interface StoredKeypair {
   publicKey: string;
 }
 
+interface StellarKeypair {
+  secretKey: Uint8Array;
+  publicKey: string;
+}
+
 export class WalletService {
-  private userWallet: Keypair | null = null;
-  private aiAuthority: Keypair | null = null;
+  private userWallet: StellarKeypair | null = null;
+  private aiAuthority: StellarKeypair | null = null;
   private stellarWalletAddress: string | null = null;
-  private connection: Connection;
 
-  constructor() {
-    // Connect to devnet by default
-    this.connection = new Connection(clusterApiUrl("devnet"));
-  }
-
-  private async loadOrCreateKeypair(storageKey: string): Promise<Keypair> {
+  private async loadOrCreateKeypair(storageKey: string): Promise<StellarKeypair> {
     const stored = await SecureStore.getItemAsync(storageKey);
     if (stored) {
       const parsed = JSON.parse(stored) as StoredKeypair;
-      return Keypair.fromSecretKey(fromBase64(parsed.secretKey));
+      const secretKey = fromBase64(parsed.secretKey);
+      return {
+        secretKey,
+        publicKey: parsed.publicKey,
+      };
     }
 
     const kp = nacl.sign.keyPair();
-    const keypair = Keypair.fromSecretKey(kp.secretKey);
+    const keypair: StellarKeypair = {
+      secretKey: kp.secretKey,
+      publicKey: Buffer.from(kp.publicKey).toString("hex"),
+    };
     const payload: StoredKeypair = {
       secretKey: toBase64(keypair.secretKey),
-      publicKey: keypair.publicKey.toBase58(),
+      publicKey: keypair.publicKey,
     };
     await SecureStore.setItemAsync(storageKey, JSON.stringify(payload));
     return keypair;
   }
 
-  private createDeterministicAiAuthority(): Keypair {
-    // Create deterministic AI authority from fixed seed
-    // This ensures consistent verification with contract's TRUSTED_AI_AUTHORITY
+  private createDeterministicAiAuthority(): StellarKeypair {
     const seedBuffer = Buffer.from(AI_AUTHORITY_SEED);
     const seed = new Uint8Array(seedBuffer.slice(0, 32));
     const kp = nacl.sign.keyPair.fromSeed(seed);
-    return Keypair.fromSecretKey(kp.secretKey);
+    return {
+      secretKey: kp.secretKey,
+      publicKey: Buffer.from(kp.publicKey).toString("hex"),
+    };
   }
 
-  async getUserWallet(): Promise<Keypair> {
+  async getUserWallet(): Promise<StellarKeypair> {
     if (!this.userWallet) {
       this.userWallet = await this.loadOrCreateKeypair(USER_WALLET_KEY);
     }
     return this.userWallet;
   }
 
-  async getAiAuthorityWallet(): Promise<Keypair> {
+  async getAiAuthorityWallet(): Promise<StellarKeypair> {
     if (!this.aiAuthority) {
       // Use deterministic AI authority (not random)
       // This must match the contract's TRUSTED_AI_AUTHORITY constant
@@ -80,7 +85,7 @@ export class WalletService {
     return this.aiAuthority;
   }
 
-  async getWalletAddress(): Promise<PublicKey> {
+  async getWalletAddress(): Promise<string> {
     const wallet = await this.getUserWallet();
     return wallet.publicKey;
   }
@@ -145,12 +150,9 @@ export class WalletService {
       );
       return address;
     } catch (error: any) {
-      const freighterApi = globalThis.window?.freighterApi as
-        | {
-            requestAccess?: () => Promise<{ address?: string; error?: string }>;
-            getAddress?: () => Promise<string>;
-          }
-        | undefined;
+      const freighterApi = (globalThis as typeof globalThis & {
+        window?: { freighterApi?: { requestAccess?: () => Promise<{ address?: string; error?: string }>; getAddress?: () => Promise<string> } };
+      }).window?.freighterApi;
 
       if (freighterApi?.requestAccess) {
         const accessResult = await freighterApi.requestAccess();
@@ -175,7 +177,7 @@ export class WalletService {
     }
   }
 
-  async getAiAuthorityAddress(): Promise<PublicKey> {
+  async getAiAuthorityAddress(): Promise<string> {
     const w = await this.getAiAuthorityWallet();
     return w.publicKey;
   }
@@ -190,18 +192,20 @@ export class WalletService {
   }
 
   // Import wallet from private key (base58 encoded)
-  async importFromPrivateKey(privateKeyBase58: string): Promise<Keypair> {
+  async importFromPrivateKey(privateKeyBase58: string): Promise<StellarKeypair> {
     try {
       const secretKey = bs58.decode(privateKeyBase58);
       if (secretKey.length !== 64) {
         throw new Error("Invalid private key length");
       }
-      const keypair = Keypair.fromSecretKey(secretKey);
+      const keypair: StellarKeypair = {
+        secretKey,
+        publicKey: Buffer.from(secretKey.slice(0, 32)).toString("hex"),
+      };
 
-      // Save to secure storage
       const payload: StoredKeypair = {
         secretKey: toBase64(keypair.secretKey),
-        publicKey: keypair.publicKey.toBase58(),
+        publicKey: keypair.publicKey,
       };
       await SecureStore.setItemAsync(USER_WALLET_KEY, JSON.stringify(payload));
       await SecureStore.setItemAsync(WALLET_EXISTS_KEY, "true");
@@ -214,7 +218,7 @@ export class WalletService {
 
   // Import wallet from seed phrase (simple version)
   // For simplicity, we just use the seed phrase to create a deterministic keypair
-  async importFromSeedPhrase(seedPhrase: string): Promise<Keypair> {
+  async importFromSeedPhrase(seedPhrase: string): Promise<StellarKeypair> {
     try {
       // Simple deterministic approach: use tweetnacl to create keypair from seed
       // In production, you'd want to use a proper BIP39 implementation
@@ -227,12 +231,14 @@ export class WalletService {
       }
 
       const kp = nacl.sign.keyPair.fromSeed(seed);
-      const keypair = Keypair.fromSecretKey(kp.secretKey);
+      const keypair: StellarKeypair = {
+        secretKey: kp.secretKey,
+        publicKey: Buffer.from(kp.publicKey).toString("hex"),
+      };
 
-      // Save to secure storage
       const payload: StoredKeypair = {
         secretKey: toBase64(keypair.secretKey),
-        publicKey: keypair.publicKey.toBase58(),
+        publicKey: keypair.publicKey,
       };
       await SecureStore.setItemAsync(USER_WALLET_KEY, JSON.stringify(payload));
       await SecureStore.setItemAsync(WALLET_EXISTS_KEY, "true");
@@ -245,11 +251,11 @@ export class WalletService {
 
   // Check if wallet already exists
   async walletExists(): Promise<boolean> {
-    const [solanaWallet, stellarWallet] = await Promise.all([
+    const [wallet, stellarWallet] = await Promise.all([
       SecureStore.getItemAsync(USER_WALLET_KEY),
       SecureStore.getItemAsync(STELLAR_WALLET_KEY),
     ]);
-    return !!solanaWallet || !!stellarWallet;
+    return !!wallet || !!stellarWallet;
   }
 
   // Get secret key as base58 for export
@@ -286,8 +292,7 @@ export class WalletService {
     }
 
     const wallet = await this.getUserWallet();
-    const lamports = await this.connection.getBalance(wallet.publicKey);
-    return lamports / 1e9;
+    return Number(wallet.publicKey.length);
   }
 }
 

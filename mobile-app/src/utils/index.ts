@@ -70,19 +70,8 @@ export const timeUntil = (timestamp: number): string => {
 };
 
 /**
- * Validate Solana address format
+ * Validate a Stellar address format
  */
-export const isValidSolanaAddress = (address: string): boolean => {
-  // Use Solana PublicKey constructor for robust validation
-  try {
-    // Lazy import to avoid bundling issues in non-solana contexts
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PublicKey } = require("@solana/web3.js");
-    // Will throw if invalid
-    // eslint-disable-next-line no-new
-    new PublicKey(address);
-    return true;
-  } catch (e) {
-    return false;
-  }
+export const isValidStellarAddress = (address: string): boolean => {
+  return typeof address === "string" && address.length >= 56 && /^[A-Z2-7]{56,}$/.test(address);
 };
