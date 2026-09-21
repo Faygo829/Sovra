@@ -4,6 +4,8 @@ Guardian Executor is a Stellar-first transaction protection system. It combines 
 
 CONTRACT ADDRESS : CAEIIWEKVHLOPNRIFT4HW2Q3PUSAQGZ3REKAX4GAXXPIEVAEYESN4B33
 
+Works on Stellar Ecosystem , Built for Stellar Ecosystem 
+
 ## What it is
 
 Most wallet flows stop at a basic signature prompt. Guardian adds a decision layer before the transaction is finalized:
